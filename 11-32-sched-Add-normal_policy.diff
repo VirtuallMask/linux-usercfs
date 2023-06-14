@@ -1,0 +1,34 @@
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index 28204472a3f1..ea3788ef9686 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -7806,7 +7806,7 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
+ 	 * Batch and idle tasks do not preempt non-idle tasks (their preemption
+ 	 * is driven by the tick):
+ 	 */
+-	if (unlikely(p->policy != SCHED_NORMAL) || !sched_feat(WAKEUP_PREEMPTION))
++	if (unlikely(!normal_policy(p->policy)) || !sched_feat(WAKEUP_PREEMPTION))
+ 		return;
+ 
+ 	find_matching_se(&se, &pse);
+diff --git a/kernel/sched/sched.h b/kernel/sched/sched.h
+index 958613dd8290..6397843b4482 100644
+--- a/kernel/sched/sched.h
++++ b/kernel/sched/sched.h
+@@ -182,9 +182,15 @@ static inline int idle_policy(int policy)
+ {
+ 	return policy == SCHED_IDLE;
+ }
++
++static inline int normal_policy(int policy)
++{
++	return policy == SCHED_NORMAL;
++}
++
+ static inline int fair_policy(int policy)
+ {
+-	return policy == SCHED_NORMAL || policy == SCHED_BATCH;
++	return normal_policy(policy) || policy == SCHED_BATCH;
+ }
+ 
+ static inline int rt_policy(int policy)

@@ -1,0 +1,77 @@
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+index 5a6f4884384e..a378e8e09061 100644
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -2223,6 +2223,17 @@ inline int task_curr(const struct task_struct *p)
+ 	return cpu_curr(task_cpu(p)) == p;
+ }
+ 
++/*
++ * ->switching_to() is called with the pi_lock and rq_lock held and must not
++ * mess with locking.
++ */
++void check_class_changing(struct rq *rq, struct task_struct *p,
++			  const struct sched_class *prev_class)
++{
++	if (prev_class != p->sched_class && p->sched_class->switching_to)
++		p->sched_class->switching_to(rq, p);
++}
++
+ /*
+  * switched_from, switched_to and prio_changed must _NOT_ drop rq->lock,
+  * use the balance_callback list if you want balancing.
+@@ -2230,9 +2241,9 @@ inline int task_curr(const struct task_struct *p)
+  * this means any call to check_class_changed() must be followed by a call to
+  * balance_callback().
+  */
+-static inline void check_class_changed(struct rq *rq, struct task_struct *p,
+-				       const struct sched_class *prev_class,
+-				       int oldprio)
++void check_class_changed(struct rq *rq, struct task_struct *p,
++			 const struct sched_class *prev_class,
++			 int oldprio)
+ {
+ 	if (prev_class != p->sched_class) {
+ 		if (prev_class->switched_from)
+@@ -7139,6 +7150,7 @@ void rt_mutex_setprio(struct task_struct *p, struct task_struct *pi_task)
+ 		}
+ 
+ 		__setscheduler_prio(p, prio);
++		check_class_changing(rq, p, prev_class);
+ 	}
+ 
+ 	check_class_changed(rq, p, prev_class, oldprio);
+@@ -7748,6 +7760,8 @@ static int __sched_setscheduler(struct task_struct *p,
+ 		}
+ 		__setscheduler_uclamp(p, attr);
+ 
++		check_class_changing(rq, p, prev_class);
++
+ 		/*
+ 		 * We enqueue to tail when the priority of a task is
+ 		 * increased (user space view).
+diff --git a/kernel/sched/sched.h b/kernel/sched/sched.h
+index 7934b597053d..1545779c5db8 100644
+--- a/kernel/sched/sched.h
++++ b/kernel/sched/sched.h
+@@ -2211,6 +2211,7 @@ struct sched_class {
+ 	 * cannot assume the switched_from/switched_to pair is serialized by
+ 	 * rq->lock. They are however serialized by p->pi_lock.
+ 	 */
++	void (*switching_to) (struct rq *this_rq, struct task_struct *task);
+ 	void (*switched_from)(struct rq *this_rq, struct task_struct *task);
+ 	void (*switched_to)  (struct rq *this_rq, struct task_struct *task);
+ 	void (*reweight_task)(struct rq *this_rq, struct task_struct *task,
+@@ -2447,6 +2448,12 @@ static inline void sub_nr_running(struct rq *rq, unsigned count)
+ extern void activate_task(struct rq *rq, struct task_struct *p, int flags);
+ extern void deactivate_task(struct rq *rq, struct task_struct *p, int flags);
+ 
++extern void check_class_changing(struct rq *rq, struct task_struct *p,
++				 const struct sched_class *prev_class);
++extern void check_class_changed(struct rq *rq, struct task_struct *p,
++				const struct sched_class *prev_class,
++				int oldprio);
++
+ extern void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags);
+ 
+ #ifdef CONFIG_PREEMPT_RT
